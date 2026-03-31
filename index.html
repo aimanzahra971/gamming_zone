@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1a1f3a 100%);
+            min-height: 100vh;
+            padding: 2rem 1rem;
+            color: #e2e8f0;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding-bottom: 2rem;
+            border-bottom: 2px solid rgba(100, 200, 255, 0.1);
+            animation: slideDown 0.6s ease-out;
+        }
+
+        header h1 {
+            font-size: 3rem;
+            background: linear-gradient(135deg, #64b8ff 0%, #5fa3ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.02em;
+            font-weight: 700;
+        }
+
+        header p {
+            font-size: 1.1rem;
+            color: #94a3b8;
+            font-weight: 300;
+            letter-spacing: 0.01em;
+        }
+
+        .games-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            animation: fadeIn 0.8s ease-out;
+            margin-bottom: 3rem;
+        }
+
+        .game-card {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid rgba(100, 200, 255, 0.1);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            backdrop-filter: blur(10px);
+        }
+
+        .game-card:hover {
+            transform: translateY(-8px);
+            border-color: rgba(100, 200, 255, 0.3);
+            box-shadow: 0 20px 48px rgba(100, 200, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            background: linear-gradient(135deg, #274060 0%, #1a2844 100%);
+        }
+
+        .game-card-header {
+            height: 160px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3.5rem;
+            background: linear-gradient(135deg, rgba(100, 200, 255, 0.1) 0%, rgba(60, 120, 160, 0.1) 100%);
+            position: relative;
+            overflow: hidden;
+            border-bottom: 1px solid rgba(100, 200, 255, 0.1);
+        }
+
+        .game-card-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(100, 200, 255, 0.05) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: moveBackground 20s linear infinite;
+        }
+
+        .game-card-header > * {
+            position: relative;
+            z-index: 1;
+            filter: drop-shadow(0 0 8px rgba(100, 200, 255, 0.2));
+        }
+
+        .game-card-content {
+            padding: 1.2rem;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .game-card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #e2e8f0;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.01em;
+        }
+
+        .game-card-description {
+            color: #cbd5e1;
+            font-size: 0.8rem;
+            margin-bottom: 0.8rem;
+            flex-grow: 1;
+            line-height: 1.5;
+        }
+
+        .game-card-footer {
+            display: flex;
+            gap: 1rem;
+            margin-top: auto;
+        }
+
+        .play-btn {
+            flex: 1;
+            background: linear-gradient(135deg, #64b8ff 0%, #5fa3ff 100%);
+            color: #0f172a;
+            border: none;
+            padding: 0.65rem 1rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            box-shadow: 0 4px 15px rgba(100, 184, 255, 0.3);
+        }
+
+        .play-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(100, 184, 255, 0.5);
+            background: linear-gradient(135deg, #76c8ff 0%, #71b3ff 100%);
+        }
+
+        .play-btn:active {
+            transform: translateY(0);
+        }
+
+        .stats-section {
+            margin-top: 3rem;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid rgba(100, 200, 255, 0.1);
+            border-radius: 12px;
+            padding: 2.5rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            animation: fadeIn 1s ease-out;
+            backdrop-filter: blur(10px);
+        }
+
+        .stats-title {
+            font-size: 2rem;
+            color: #e2e8f0;
+            margin-bottom: 2rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, rgba(100, 200, 255, 0.1) 0%, rgba(60, 120, 160, 0.05) 100%);
+            border: 1px solid rgba(100, 200, 255, 0.2);
+            border-radius: 12px;
+            padding: 1.75rem;
+            color: #e2e8f0;
+            text-align: center;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+
+        .stat-card:hover {
+            border-color: rgba(100, 200, 255, 0.4);
+            background: linear-gradient(135deg, rgba(100, 200, 255, 0.15) 0%, rgba(60, 120, 160, 0.1) 100%);
+            box-shadow: 0 8px 16px rgba(100, 200, 255, 0.1);
+            transform: translateY(-4px);
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #64b8ff 0%, #5fa3ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 500;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes moveBackground {
+            0% {
+                transform: translate(0, 0);
+            }
+            100% {
+                transform: translate(50px, 50px);
+            }
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2rem;
+            }
+
+            header p {
+                font-size: 1rem;
+            }
+
+            .games-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stat-number {
+                font-size: 2rem;
+            }
+
+            .stats-section {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>🎮 Gaming Hub</h1>
+            <p>Choose your adventure and start playing!</p>
+        </header>
+
+        <!-- Games Grid -->
+        <section class="games-grid">
+            <!-- Car Driving Game Card -->
+            <div class="game-card">
+                <div class="game-card-header">🚗</div>
+                <div class="game-card-content">
+                    <div>
+                        <h2 class="game-card-title">Car Driving Challenge</h2>
+                        <p class="game-card-description">
+                            Navigate through challenging courses in this high-speed 3D driving game. Hit checkpoints and master the art of racing!
+                        </p>
+                    </div>
+                    <div class="game-card-footer">
+                        <a href="car_driving.html" class="play-btn">Play</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Maze Escape Game Card -->
+            <div class="game-card">
+                <div class="game-card-header">🌀</div>
+                <div class="game-card-content">
+                    <div>
+                        <h2 class="game-card-title">Maze Escape 3D</h2>
+                        <p class="game-card-description">
+                            Get lost in a complex 3D maze and find your way out. Navigate carefully and discover hidden passages to escape!
+                        </p>
+                    </div>
+                    <div class="game-card-footer">
+                        <a href="maze_escape_3D.html" class="play-btn">Play</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shooting Adventure Game Card -->
+            <div class="game-card">
+                <div class="game-card-header">🎯</div>
+                <div class="game-card-content">
+                    <div>
+                        <h2 class="game-card-title">Shooting Adventure</h2>
+                        <p class="game-card-description">
+                            Engage in action-packed shooting combat. Destroy enemies, avoid obstacles, and achieve the highest score!
+                        </p>
+                    </div>
+                    <div class="game-card-footer">
+                        <a href="shooting_adventure.html" class="play-btn">Play</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Treasure Run Game Card -->
+            <div class="game-card">
+                <div class="game-card-header">💎</div>
+                <div class="game-card-content">
+                    <div>
+                        <h2 class="game-card-title">Treasure Run</h2>
+                        <p class="game-card-description">
+                            Run through levels collecting treasures and dodging hazards. Race against time and collect as much as you can!
+                        </p>
+                    </div>
+                    <div class="game-card-footer">
+                        <a href="Treasure_Run.html" class="play-btn">Play</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Stats Section -->
+        <section class="stats-section">
+            <h2 class="stats-title">Your Game Library</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">4</div>
+                    <div class="stat-label">Total Games</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">∞</div>
+                    <div class="stat-label">Hours of Fun</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">100%</div>
+                    <div class="stat-label">Awesome</div>
+                </div>
+            </div>
+        </section>
+    </div>
+</body>
+</html>

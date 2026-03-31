@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maze Escape 3D</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+        #game-canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: none;
+        }
+        .hud-panel {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid #555;
+            border-radius: 10px;
+            color: white;
+            padding: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
+        }
+        #top-left-hud {
+            top: 20px;
+            left: 20px;
+            font-size: 1.2rem;
+        }
+        #minimap-container {
+            bottom: 20px;
+            right: 20px;
+            width: 160px;
+            height: 160px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #minimap {
+            width: 140px;
+            height: 140px;
+            background: rgba(0,20,0,0.8);
+            border: 2px solid #228b22;
+            border-radius: 5px;
+        }
+        .stat-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .stat-icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            text-align: center;
+            line-height: 24px;
+            font-weight: bold;
+        }
+        .health-icon { background: #ff4444; }
+        .key-icon { background: #ffd700; color: black; }
+        .level-icon { background: #4488ff; }
+
+        .health-bar-container {
+            width: 150px;
+            height: 15px;
+            background: #333;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-left: 10px;
+        }
+        #health-bar {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #ff0000, #ff5555);
+            transition: width 0.3s;
+        }
+        
+        /* Overlays */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 100;
+            pointer-events: auto;
+        }
+        .overlay h1 {
+            font-size: 4rem;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            text-shadow: 0 0 20px rgba(255,255,255,0.5);
+        }
+        .overlay p {
+            font-size: 1.5rem;
+            max-width: 600px;
+            text-align: center;
+            line-height: 1.6;
+            margin-bottom: 30px;
+            color: #ddd;
+        }
+        .btn {
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            background: linear-gradient(45deg, #4488ff, #2255cc);
+            border: none;
+            border-radius: 30px;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+        .btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 25px rgba(68, 136, 255, 0.6);
+        }
+        
+        #damage-flash {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: red;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.1s;
+            z-index: 50;
+        }
+
+        .chest {
+            font-size: 6rem;
+            margin: 20px;
+            animation: bounce 2s infinite;
+            text-shadow: 0 0 50px gold;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        
+        #controls-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 20px;
+            color: #aaa;
+            font-size: 0.9rem;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container"></div>
+    <div id="damage-flash"></div>
+
+    <!-- Main UI HUD -->
+    <div id="ui-layer">
+        <div id="top-left-hud" class="hud-panel">
+            <div class="stat-row">
+                <div class="stat-icon level-icon">L</div>
+                <span id="level-text">Level 1</span>
+            </div>
+            <div class="stat-row">
+                <div class="stat-icon health-icon">♥</div>
+                <span>Health</span>
+                <div class="health-bar-container">
+                    <div id="health-bar"></div>
+                </div>
+            </div>
+            <div class="stat-row">
+                <div class="stat-icon key-icon">🗝</div>
+                <span>Keys: <strong id="keys-text">0</strong></span>
+            </div>
+        </div>
+        
+        <div id="minimap-container" class="hud-panel">
+            <div style="font-size: 0.9rem; margin-bottom: 5px; color:#aaa;">MINIMAP</div>
+            <canvas id="minimap" width="140" height="140"></canvas>
+        </div>
+        
+        <div id="controls-hint">W A S D / Arrows to Move</div>
+    </div>
+
+    <!-- Menus -->
+    <div id="start-menu" class="overlay">
+        <h1>Maze Escape 3D</h1>
+        <p>Explore the maze, collect keys to unlock doors, avoid deadly traps, and find the escape gate.<br><br>The maze gets harder as you progress. Good luck!</p>
+        <div style="display: flex; gap: 15px; margin-top: 20px;">
+            <button class="btn" onclick="startGame()">Start Adventure</button>
+            <button class="btn" style="background: linear-gradient(45deg, #666, #444);" onclick="goBackToDashboard()">← Back</button>
+        </div>
+    </div>
+
+    <div id="level-complete-menu" class="overlay" style="display: none;">
+        <h1 style="color: #44ff44;">Level Complete!</h1>
+        <p id="level-complete-msg">You found the exit!</p>
+        <button class="btn" style="background: linear-gradient(45deg, #22cc22, #008800);" onclick="nextLevel()">Next Level</button>
+    </div>
+
+    <div id="game-over-menu" class="overlay" style="display: none;">
+        <h1 style="color: #ff4444;">You Died</h1>
+        <p>You succumbed to the dangers of the maze.</p>
+        <button class="btn" style="background: linear-gradient(45deg, #cc2222, #880000);" onclick="restartLevel()">Try Again</button>
+    </div>
+
+    <div id="victory-menu" class="overlay" style="display: none;">
+        <h1 style="color: #ffd700;">Victory!</h1>
+        <div class="chest">👑💎</div>
+        <p>You have conquered all 5 levels of the maze, solved the final puzzle, and escaped successfully!</p>
+        <p style="font-size: 1.2rem; color: gold;">Reward: Master Explorer Title</p>
+        <button class="btn" style="background: linear-gradient(45deg, #ffaa00, #cc6600);" onclick="location.reload()">Play Again</button>
+    </div>
+
+    <script>
+        // --- GAME CONFIGURATION & LEVELS ---
+        const BLOCK_SIZE = 10;
+        const PLAYER_SIZE = 3;
+        const PLAYER_SPEED = 0.3;
+        const ROTATION_SPEED = 0.04;
+        
+        // Maze Legends:
+        // # : Wall
+        // . : Empty Floor
+        // S : Start Position
+        // E : Exit Gate
+        // K : Key
+        // D : Locked Door (requires 1 key)
+        // T : Spike Trap
+        // M : Moving/Timed Wall
+        // F : Final Gate (requires 3 keys)
+
+        const levels = [
+            // Level 1: Basics
+            {
+                grid: [
+                    "#######",
+                    "#S..K.#",
+                    "###D###",
+                    "#..E..#",
+                    "#######"
+                ],
+                dark: false,
+                msg: "Level 1: Find the key to unlock the door."
+            },
+            // Level 2: Traps
+            {
+                grid: [
+                    "#########",
+                    "#S..T.K.#",
+                    "###.#.###",
+                    "#.K.#.D.#",
+                    "###D#.#.#",
+                    "#.....E.#",
+                    "#########"
+                ],
+                dark: false,
+                msg: "Level 2: Beware of the floor spikes!"
+            },
+            // Level 3: Dark Maze
+            {
+                grid: [
+                    "###########",
+                    "#S....T...#",
+                    "#.###.###.#",
+                    "#.K.#...#K#",
+                    "#.#.###D#.#",
+                    "#.T...#...#",
+                    "###.###D###",
+                    "#.......E.#",
+                    "###########"
+                ],
+                dark: true,
+                msg: "Level 3: It's dark. Use your flashlight to navigate."
+            },
+            // Level 4: Moving Walls
+            {
+                grid: [
+                    "###########",
+                    "#S..M..K..#",
+                    "###.###.###",
+                    "#K.T.M....#",
+                    "#.#######D#",
+                    "#T...M..#.E",
+                    "###D###.###",
+                    "#K........#",
+                    "###########"
+                ],
+                dark: false,
+                msg: "Level 4: Timing is everything. Watch the shifting walls."
+            },
+            // Level 5: Final Puzzle
+            {
+                grid: [
+                    "#############",
+                    "#S.T...K...T#",
+                    "###.###.###.#",
+                    "#K..M.#.#..K#",
+                    "###.#.#.#.###",
+                    "#...T...T...#",
+                    "######F######",
+                    "#.....E.....#",
+                    "#############"
+                ],
+                dark: false,
+                msg: "Level 5: The Final Gate requires 3 keys to open."
+            }
+        ];
+
+        // --- GLOBAL VARIABLES ---
+        let scene, camera, renderer;
+        let playerPivot, playerMesh, flashlight;
+        let walls = [], doors = [], keys = [], traps = [], movingWalls = [];
+        let exitGate, finalGate;
+        
+        let gameState = {
+            level: 0,
+            health: 100,
+            keysCollected: 0,
+            isPlaying: false,
+            gridWidth: 0,
+            gridHeight: 0
+        };
+
+        const input = { w: false, a: false, s: false, d: false, up: false, down: false, left: false, right: false };
+        
+        // Materials (Generated Procedurally)
+        let wallMat, floorMat, doorMat, finalGateMat, playerMat;
+        
+        // --- TEXTURE GENERATION ---
+        function createNoiseTexture(color1, color2, isBrick) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = color1;
+            ctx.fillRect(0, 0, 256, 256);
+            
+            // Add noise
+            for (let i = 0; i < 4000; i++) {
+                ctx.fillStyle = Math.random() > 0.5 ? color2 : color1;
+                ctx.globalAlpha = Math.random() * 0.5;
+                ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+            }
+            
+            // Draw brick lines if requested
+            if (isBrick) {
+                ctx.globalAlpha = 0.6;
+                ctx.fillStyle = '#111';
+                for(let y=0; y<256; y+=32) {
+                    ctx.fillRect(0, y, 256, 2);
+                    let offsetX = (y/32 % 2 === 0) ? 0 : 32;
+                    for(let x=0; x<256; x+=64) {
+                        ctx.fillRect(x + offsetX, y, 2, 32);
+                    }
+                }
+            } else {
+                // Checkered floor pattern
+                ctx.globalAlpha = 0.2;
+                ctx.fillStyle = '#000';
+                for(let y=0; y<256; y+=64) {
+                    for(let x=0; x<256; x+=64) {
+                        if ((x/64 + y/64) % 2 === 0) {
+                            ctx.fillRect(x, y, 64, 64);
+                        }
+                    }
+                }
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(1, 1);
+            return texture;
+        }
+
+        // --- INITIALIZATION ---
+        function init() {
+            const container = document.getElementById('game-container');
+            
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a1a);
+            scene.fog = new THREE.FogExp2(0x0a0a1a, 0.015);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+            scene.ambientLight = ambientLight; // store ref
+
+            const dirLight = new THREE.DirectionalLight(0xaaccff, 0.6);
+            dirLight.position.set(50, 100, 50);
+            dirLight.castShadow = true;
+            dirLight.shadow.camera.top = 100;
+            dirLight.shadow.camera.bottom = -100;
+            dirLight.shadow.camera.left = -100;
+            dirLight.shadow.camera.right = 100;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            scene.add(dirLight);
+            scene.dirLight = dirLight; // store ref
+
+            // Materials
+            const wallTex = createNoiseTexture('#4a5568', '#2d3748', true);
+            const floorTex = createNoiseTexture('#2d3748', '#1a202c', false);
+            floorTex.repeat.set(20, 20);
+
+            wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.8 });
+            floorMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.9 });
+            doorMat = new THREE.MeshStandardMaterial({ color: 0xff4444, transparent: true, opacity: 0.8, roughness: 0.2, metalness: 0.5 });
+            finalGateMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, transparent: true, opacity: 0.9, metalness: 0.8, roughness: 0.2 });
+            playerMat = new THREE.MeshStandardMaterial({ color: 0x4488ff, roughness: 0.4, metalness: 0.3 });
+
+            // Universal Floor
+            const floorGeo = new THREE.PlaneGeometry(500, 500);
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            // Player Setup
+            playerPivot = new THREE.Group();
+            scene.add(playerPivot);
+            
+            // FIX: Replaced CapsuleGeometry (not in r128) with CylinderGeometry
+            const playerGeo = new THREE.CylinderGeometry(PLAYER_SIZE/2, PLAYER_SIZE/2, PLAYER_SIZE, 16);
+            playerMesh = new THREE.Mesh(playerGeo, playerMat);
+            playerMesh.position.y = PLAYER_SIZE;
+            playerMesh.castShadow = true;
+            playerMesh.receiveShadow = true;
+            playerPivot.add(playerMesh);
+
+            // Flashlight
+            flashlight = new THREE.SpotLight(0xffffee, 0, 100, Math.PI/4, 0.5, 1);
+            flashlight.position.set(0, PLAYER_SIZE, 0);
+            flashlight.target.position.set(0, PLAYER_SIZE, -10);
+            playerPivot.add(flashlight);
+            playerPivot.add(flashlight.target);
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+
+            // Start Animation Loop
+            animate();
+        }
+
+        // --- LEVEL GENERATION ---
+        function buildLevel(levelIndex) {
+            // Clear old objects
+            walls.forEach(w => scene.remove(w.mesh));
+            doors.forEach(d => scene.remove(d.mesh));
+            keys.forEach(k => scene.remove(k.mesh));
+            traps.forEach(t => scene.remove(t.group));
+            movingWalls.forEach(m => scene.remove(m.mesh));
+            if(exitGate) scene.remove(exitGate);
+            if(finalGate) scene.remove(finalGate);
+
+            walls = []; doors = []; keys = []; traps = []; movingWalls = [];
+            exitGate = null; finalGate = null;
+
+            const lvl = levels[levelIndex];
+            const grid = lvl.grid;
+            
+            gameState.gridHeight = grid.length;
+            gameState.gridWidth = grid[0].length;
+            
+            const offsetX = (gameState.gridWidth * BLOCK_SIZE) / 2;
+            const offsetZ = (gameState.gridHeight * BLOCK_SIZE) / 2;
+
+            const wallGeo = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE * 2, BLOCK_SIZE);
+            const doorGeo = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE * 2, BLOCK_SIZE * 0.2);
+            const keyGeo = new THREE.TorusGeometry(1.5, 0.4, 8, 16);
+            const keyMat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xaa8800, metalness: 1, roughness: 0.2 });
+
+            for (let row = 0; row < grid.length; row++) {
+                for (let col = 0; col < grid[row].length; col++) {
+                    const char = grid[row][col];
+                    const px = col * BLOCK_SIZE - offsetX;
+                    const pz = row * BLOCK_SIZE - offsetZ;
+
+                    if (char === '#') {
+                        let mesh = new THREE.Mesh(wallGeo, wallMat);
+                        mesh.position.set(px, BLOCK_SIZE, pz);
+                        mesh.castShadow = true;
+                        mesh.receiveShadow = true;
+                        scene.add(mesh);
+                        walls.push({ mesh, box: new THREE.Box3() });
+                    } else if (char === 'S') {
+                        playerPivot.position.set(px, 0, pz);
+                        playerPivot.rotation.y = 0;
+                    } else if (char === 'K') {
+                        let mesh = new THREE.Mesh(keyGeo, keyMat);
+                        mesh.position.set(px, 4, pz);
+                        
+                        // Add glow
+                        let light = new THREE.PointLight(0xffd700, 1, 15);
+                        mesh.add(light);
+                        
+                        scene.add(mesh);
+                        keys.push({ mesh, x: px, z: pz, active: true });
+                    } else if (char === 'D') {
+                        let mesh = new THREE.Mesh(doorGeo, doorMat);
+                        // Determine orientation based on neighbours (simple heuristic)
+                        let isHoriz = (grid[row][col-1] === '#' || grid[row][col+1] === '#');
+                        if (isHoriz) mesh.rotation.y = Math.PI/2;
+                        
+                        mesh.position.set(px, BLOCK_SIZE, pz);
+                        mesh.castShadow = true;
+                        scene.add(mesh);
+                        doors.push({ mesh, box: new THREE.Box3(), active: true, reqKeys: 1 });
+                    } else if (char === 'F') {
+                        // Final Gate
+                        let mesh = new THREE.Mesh(new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE * 2, BLOCK_SIZE), finalGateMat);
+                        mesh.position.set(px, BLOCK_SIZE, pz);
+                        scene.add(mesh);
+                        finalGate = { mesh, box: new THREE.Box3(), active: true, reqKeys: 3 };
+                    } else if (char === 'E') {
+                        // Exit Area
+                        let mesh = new THREE.Mesh(new THREE.CylinderGeometry(BLOCK_SIZE/2, BLOCK_SIZE/2, 0.5, 32), 
+                                   new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 }));
+                        mesh.position.set(px, 0.3, pz);
+                        let light = new THREE.PointLight(0x00ff00, 2, 20);
+                        light.position.y = 5;
+                        mesh.add(light);
+                        scene.add(mesh);
+                        exitGate = { mesh, x: px, z: pz };
+                    } else if (char === 'T') {
+                        // Spike Trap
+                        let group = new THREE.Group();
+                        group.position.set(px, 0, pz);
+                        
+                        const baseGeo = new THREE.BoxGeometry(BLOCK_SIZE*0.8, 0.5, BLOCK_SIZE*0.8);
+                        const baseMat = new THREE.MeshStandardMaterial({color: 0x333333});
+                        let base = new THREE.Mesh(baseGeo, baseMat);
+                        group.add(base);
+
+                        let spikeGeo = new THREE.ConeGeometry(0.5, 4, 4);
+                        let spikeMat = new THREE.MeshStandardMaterial({color: 0x888888, metalness: 0.8});
+                        
+                        let spikes = new THREE.Group();
+                        for(let i=-2; i<=2; i+=2) {
+                            for(let j=-2; j<=2; j+=2) {
+                                let s = new THREE.Mesh(spikeGeo, spikeMat);
+                                s.position.set(i, 0, j);
+                                spikes.add(s);
+                            }
+                        }
+                        group.add(spikes);
+                        scene.add(group);
+                        traps.push({ group, spikes, x: px, z: pz, phase: Math.random() * Math.PI * 2 });
+                    } else if (char === 'M') {
+                        // Moving Wall
+                        let mesh = new THREE.Mesh(wallGeo, new THREE.MeshStandardMaterial({color: 0x555566, roughness: 0.5}));
+                        mesh.position.set(px, BLOCK_SIZE, pz);
+                        mesh.castShadow = true;
+                        mesh.receiveShadow = true;
+                        scene.add(mesh);
+                        movingWalls.push({ mesh, box: new THREE.Box3(), baseY: BLOCK_SIZE, phase: Math.random() * Math.PI * 2 });
+                    }
+                }
+            }
+
+            // Update bounding boxes once
+            updateBoxes();
+
+            // Environment specific settings
+            if (lvl.dark) {
+                scene.ambientLight.intensity = 0.05;
+                scene.dirLight.intensity = 0.1;
+                scene.fog.density = 0.04;
+                flashlight.intensity = 2;
+                playerMesh.material.emissive.setHex(0x112233);
+            } else {
+                scene.ambientLight.intensity = 0.4;
+                scene.dirLight.intensity = 0.6;
+                scene.fog.density = 0.015;
+                flashlight.intensity = 0;
+                playerMesh.material.emissive.setHex(0x000000);
+            }
+
+            // Update UI
+            document.getElementById('level-text').innerText = `Level ${levelIndex + 1}`;
+            gameState.keysCollected = 0;
+            updateHUD();
+            drawMinimap();
+        }
+
+        function updateBoxes() {
+            walls.forEach(w => w.box.setFromObject(w.mesh));
+            doors.forEach(d => { if(d.active) d.box.setFromObject(d.mesh) });
+            movingWalls.forEach(m => m.box.setFromObject(m.mesh));
+            if(finalGate && finalGate.active) finalGate.box.setFromObject(finalGate.mesh);
+        }
+
+        // --- GAME LOGIC ---
+        function goBackToDashboard() {
+            window.location.href = 'index.html';
+        }
+
+        function startGame() {
+            document.getElementById('start-menu').style.display = 'none';
+            document.getElementById('ui-layer').style.display = 'block';
+            gameState.level = 0;
+            gameState.health = 100;
+            gameState.isPlaying = true;
+            buildLevel(gameState.level);
+        }
+
+        function nextLevel() {
+            document.getElementById('level-complete-menu').style.display = 'none';
+            gameState.level++;
+            if (gameState.level >= levels.length) {
+                // Should not happen via this button normally, handled by win condition
+            } else {
+                gameState.health = 100;
+                gameState.isPlaying = true;
+                buildLevel(gameState.level);
+            }
+        }
+
+        function restartLevel() {
+            document.getElementById('game-over-menu').style.display = 'none';
+            gameState.health = 100;
+            gameState.isPlaying = true;
+            buildLevel(gameState.level);
+        }
+
+        function takeDamage(amount) {
+            if(!gameState.isPlaying) return;
+            gameState.health -= amount;
+            
+            // Flash red
+            const flash = document.getElementById('damage-flash');
+            flash.style.opacity = '0.5';
+            setTimeout(() => { flash.style.opacity = '0'; }, 100);
+
+            // Knockback effect
+            playerPivot.position.add(new THREE.Vector3(0,0,2).applyMatrix4(new THREE.Matrix4().makeRotationY(playerPivot.rotation.y)));
+
+            if (gameState.health <= 0) {
+                gameState.health = 0;
+                gameState.isPlaying = false;
+                document.getElementById('game-over-menu').style.display = 'flex';
+            }
+            updateHUD();
+        }
+
+        function updateHUD() {
+            document.getElementById('health-bar').style.width = gameState.health + '%';
+            document.getElementById('keys-text').innerText = gameState.keysCollected;
+        }
+
+        // --- INPUT HANDLING ---
+        function onKeyDown(e) {
+            switch(e.key.toLowerCase()) {
+                case 'w': case 'arrowup': input.w = true; break;
+                case 'a': case 'arrowleft': input.a = true; break;
+                case 's': case 'arrowdown': input.s = true; break;
+                case 'd': case 'arrowright': input.d = true; break;
+            }
+        }
+        function onKeyUp(e) {
+            switch(e.key.toLowerCase()) {
+                case 'w': case 'arrowup': input.w = false; break;
+                case 'a': case 'arrowleft': input.a = false; break;
+                case 's': case 'arrowdown': input.s = false; break;
+                case 'd': case 'arrowright': input.d = false; break;
+            }
+        }
+
+        // --- COLLISION DETECTION ---
+        function checkCollision(targetPos) {
+            // Player bounding box (slightly smaller than visual to slide along walls)
+            const pBox = new THREE.Box3().setFromCenterAndSize(
+                new THREE.Vector3(targetPos.x, PLAYER_SIZE, targetPos.z),
+                new THREE.Vector3(PLAYER_SIZE * 0.8, PLAYER_SIZE * 2, PLAYER_SIZE * 0.8)
+            );
+
+            // Walls
+            for (let w of walls) {
+                if (pBox.intersectsBox(w.box)) return true;
+            }
+            
+            // Moving Walls (only if they are up)
+            for (let m of movingWalls) {
+                if (m.mesh.position.y > 0 && pBox.intersectsBox(m.box)) return true;
+            }
+
+            // Doors
+            for (let d of doors) {
+                if (d.active && pBox.intersectsBox(d.box)) {
+                    if (gameState.keysCollected >= d.reqKeys) {
+                        // Open door
+                        gameState.keysCollected -= d.reqKeys;
+                        d.active = false;
+                        scene.remove(d.mesh);
+                        updateHUD();
+                        return false; // No longer colliding
+                    }
+                    return true;
+                }
+            }
+
+            // Final Gate
+            if (finalGate && finalGate.active && pBox.intersectsBox(finalGate.box)) {
+                if (gameState.keysCollected >= finalGate.reqKeys) {
+                    // Open final gate
+                    gameState.keysCollected -= finalGate.reqKeys;
+                    finalGate.active = false;
+                    scene.remove(finalGate.mesh);
+                    updateHUD();
+                    return false;
+                } else {
+                    // Feedback that keys are needed
+                    const keysNeeded = finalGate.reqKeys - gameState.keysCollected;
+                    document.getElementById('controls-hint').innerText = `You need ${keysNeeded} more key(s) to open this gate!`;
+                    setTimeout(() => { document.getElementById('controls-hint').innerText = 'W A S D / Arrows to Move'; }, 2000);
+                }
+                return true;
+            }
+
+            return false;
+        }
+
+        // --- UPDATE LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (!gameState.isPlaying) {
+                renderer.render(scene, camera);
+                return;
+            }
+
+            const time = Date.now() * 0.002;
+
+            // Movement
+            if (input.a) playerPivot.rotation.y += ROTATION_SPEED;
+            if (input.d) playerPivot.rotation.y -= ROTATION_SPEED;
+
+            if (input.w || input.s) {
+                const dir = new THREE.Vector3(0, 0, input.w ? -1 : 1);
+                dir.applyEuler(playerPivot.rotation);
+                dir.normalize().multiplyScalar(PLAYER_SPEED);
+
+                const targetPos = playerPivot.position.clone().add(dir);
+                
+                if (!checkCollision(targetPos)) {
+                    playerPivot.position.copy(targetPos);
+                } else {
+                    // Simple sliding: try moving only X or only Z
+                    const targetX = playerPivot.position.clone(); targetX.x += dir.x;
+                    const targetZ = playerPivot.position.clone(); targetZ.z += dir.z;
+                    
+                    if (!checkCollision(targetX)) playerPivot.position.x += dir.x;
+                    else if (!checkCollision(targetZ)) playerPivot.position.z += dir.z;
+                }
+                
+                // Bobbing effect
+                playerMesh.position.y = PLAYER_SIZE + Math.sin(time * 5) * 0.2;
+                
+                // Redraw map while moving
+                if (Math.random() < 0.1) drawMinimap();
+            } else {
+                playerMesh.position.y = THREE.MathUtils.lerp(playerMesh.position.y, PLAYER_SIZE, 0.1);
+            }
+
+            // Camera follow (Third Person)
+            const cameraOffset = new THREE.Vector3(0, 12, 18); // Height, distance back
+            cameraOffset.applyMatrix4(playerPivot.matrixWorld);
+            camera.position.lerp(cameraOffset, 0.1);
+            camera.lookAt(playerPivot.position.clone().add(new THREE.Vector3(0, 4, 0)));
+
+            // Animations & Interactions
+            const pPos = playerPivot.position;
+
+            // Keys
+            keys.forEach(k => {
+                if (k.active) {
+                    k.mesh.rotation.y += 0.05;
+                    k.mesh.position.y = 4 + Math.sin(time * 2 + k.x) * 1;
+                    
+                    const dist = Math.hypot(pPos.x - k.x, pPos.z - k.z);
+                    if (dist < 4) {
+                        k.active = false;
+                        scene.remove(k.mesh);
+                        gameState.keysCollected++;
+                        updateHUD();
+                    }
+                }
+            });
+
+            // Traps (Spikes)
+            traps.forEach(t => {
+                // Spikes go up and down
+                const yPos = Math.sin(time * 2 + t.phase) * 3 - 1; // -4 to 2
+                t.spikes.position.y = Math.max(-0.5, yPos);
+                
+                // Check damage
+                if (t.spikes.position.y > 0.5) {
+                    const dist = Math.hypot(pPos.x - t.x, pPos.z - t.z);
+                    if (dist < BLOCK_SIZE * 0.6) {
+                        takeDamage(20);
+                    }
+                }
+            });
+
+            // Moving Walls (Gates)
+            movingWalls.forEach(m => {
+                // Move up and down
+                const yOffset = Math.sin(time * 1.5 + m.phase) * (BLOCK_SIZE * 0.8);
+                m.mesh.position.y = m.baseY + yOffset;
+                m.box.setFromObject(m.mesh); // Update box
+            });
+
+            // Exit
+            if (exitGate) {
+                exitGate.mesh.rotation.y -= 0.02;
+                const dist = Math.hypot(pPos.x - exitGate.x, pPos.z - exitGate.z);
+                if (dist < 5) {
+                    gameState.isPlaying = false;
+                    if (gameState.level === levels.length - 1) {
+                        // Won game
+                        document.getElementById('ui-layer').style.display = 'none';
+                        document.getElementById('victory-menu').style.display = 'flex';
+                    } else {
+                        // Won level
+                        document.getElementById('level-complete-menu').style.display = 'flex';
+                    }
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // --- MINIMAP RENDERER ---
+        function drawMinimap() {
+            const canvas = document.getElementById('minimap');
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            ctx.clearRect(0, 0, w, h);
+            
+            if (!gameState.isPlaying) return;
+
+            const grid = levels[gameState.level].grid;
+            const rows = grid.length;
+            const cols = grid[0].length;
+            
+            // Calculate cell size
+            const maxDimension = Math.max(rows, cols);
+            const cellSize = (w - 10) / maxDimension;
+            
+            const offsetX = (w - (cols * cellSize)) / 2;
+            const offsetY = (h - (rows * cellSize)) / 2;
+
+            // Draw maze layout
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const char = grid[r][c];
+                    const cx = offsetX + c * cellSize;
+                    const cy = offsetY + r * cellSize;
+                    
+                    if (char === '#') {
+                        ctx.fillStyle = '#666';
+                        ctx.fillRect(cx, cy, cellSize+0.5, cellSize+0.5);
+                    } else if (char === 'E') {
+                        ctx.fillStyle = '#00ff00';
+                        ctx.fillRect(cx, cy, cellSize, cellSize);
+                    }
+                }
+            }
+            
+            // Calculate player grid position
+            const levelOffsetX = (gameState.gridWidth * BLOCK_SIZE) / 2;
+            const levelOffsetZ = (gameState.gridHeight * BLOCK_SIZE) / 2;
+            
+            const px = (playerPivot.position.x + levelOffsetX) / BLOCK_SIZE;
+            const pz = (playerPivot.position.z + levelOffsetZ) / BLOCK_SIZE;
+            
+            // Draw Player
+            ctx.fillStyle = '#4488ff';
+            ctx.beginPath();
+            ctx.arc(offsetX + px * cellSize, offsetY + pz * cellSize, cellSize * 0.4, 0, Math.PI*2);
+            ctx.fill();
+            
+            // Draw view direction
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(offsetX + px * cellSize, offsetY + pz * cellSize);
+            const dirX = Math.sin(playerPivot.rotation.y) * cellSize;
+            const dirZ = -Math.cos(playerPivot.rotation.y) * cellSize;
+            ctx.lineTo(offsetX + px * cellSize + dirX, offsetY + pz * cellSize + dirZ);
+            ctx.stroke();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Initialize engine on load
+        window.onload = init;
+
+    </script>
+</body>
+</html>

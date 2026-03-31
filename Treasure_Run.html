@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Treasure Run</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #87CEEB;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none; /* Prevent browser swipe gestures */
+        }
+        #gameCanvas {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        #hud {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px 40px;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            background: linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 100%);
+        }
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            pointer-events: auto;
+            backdrop-filter: blur(5px);
+            transition: opacity 0.3s;
+        }
+        .hidden {
+            display: none !important;
+        }
+        h1 {
+            font-size: 64px;
+            margin: 0 0 20px 0;
+            color: #FFD700;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            text-shadow: 0 4px 10px rgba(255, 215, 0, 0.5);
+            text-align: center;
+        }
+        p {
+            font-size: 24px;
+            margin: 10px 0;
+            text-align: center;
+            max-width: 600px;
+        }
+        .stats {
+            font-size: 32px;
+            color: #4CAF50;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+        button {
+            padding: 15px 40px;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            background: #4CAF50;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            margin-top: 30px;
+            box-shadow: 0 6px 0 #2E7D32;
+            transition: transform 0.1s, box-shadow 0.1s;
+            text-transform: uppercase;
+        }
+        button:active {
+            transform: translateY(6px);
+            box-shadow: 0 0 0 #2E7D32;
+        }
+        .controls-info {
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 15px;
+            margin-top: 20px;
+            font-size: 18px;
+        }
+        #levelText {
+            position: absolute;
+            top: 100px;
+            width: 100%;
+            text-align: center;
+            font-size: 48px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            opacity: 0;
+            transition: opacity 0.5s;
+            pointer-events: none;
+        }
+        @media (max-width: 768px) {
+            #hud { padding: 10px 20px; font-size: 18px; }
+            h1 { font-size: 42px; }
+            p { font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI Overlay -->
+    <div id="ui">
+        <div id="hud">
+            <div>Score: <span id="scoreDisplay">0</span></div>
+            <div>Level: <span id="levelDisplay">1</span></div>
+            <div>Coins: <span id="coinsDisplay">0</span></div>
+        </div>
+
+        <div id="levelText">Level 1</div>
+
+        <!-- Start Screen -->
+        <div id="startScreen" class="screen">
+            <h1>Treasure Run</h1>
+            <p>Dodge obstacles, collect coins, and reach the final treasure!</p>
+            <div class="controls-info">
+                <strong>Controls:</strong><br>
+                Desktop: Left/Right Arrows to move, Up Arrow/Space to jump.<br>
+                Mobile: Swipe Left/Right to move, Tap to jump.
+            </div>
+            <div style="display: flex; gap: 15px; margin-top: 20px;">
+                <button onclick="startGame()">Start Adventure</button>
+                <button onclick="goBackToDashboard()" style="background: #666; box-shadow: 0 6px 0 #444;">← Back</button>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="screen hidden">
+            <h1 style="color: #FF5252; text-shadow: 0 4px 10px rgba(255, 82, 82, 0.5);">Game Over</h1>
+            <p>You hit an obstacle or fell into the abyss!</p>
+            <div class="stats">
+                Score: <span id="goScore">0</span> | Coins: <span id="goCoins">0</span>
+            </div>
+            <button onclick="startGame()">Try Again</button>
+        </div>
+
+        <!-- Victory Screen -->
+        <div id="victoryScreen" class="screen hidden">
+            <h1 style="color: #FFD700;">Victory!</h1>
+            <p>You survived all levels and found the ancient treasure!</p>
+            <div class="stats">
+                Total Score: <span id="winScore">0</span><br>
+                Total Coins: <span id="winCoins">0</span>
+            </div>
+            <button onclick="startGame()">Play Again</button>
+        </div>
+    </div>
+
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // --- AUDIO SYNTHESIZER ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const now = audioCtx.currentTime;
+            
+            if (type === 'coin') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(1600, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } else if (type === 'jump') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.linearRampToValueAtTime(500, now + 0.2);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } else if (type === 'crash') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.3);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'win') {
+                const notes = [440, 554, 659, 880, 1108]; // A Major Arpeggio
+                notes.forEach((freq, i) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'square';
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(0, now + i*0.15);
+                    gain.gain.linearRampToValueAtTime(0.05, now + i*0.15 + 0.05);
+                    gain.gain.linearRampToValueAtTime(0, now + i*0.15 + 0.15);
+                    osc.start(now + i*0.15);
+                    osc.stop(now + i*0.15 + 0.15);
+                });
+            } else if (type === 'collapse') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(100, now);
+                osc.frequency.exponentialRampToValueAtTime(20, now + 0.4);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
+                osc.start(now);
+                osc.stop(now + 0.4);
+            }
+        }
+
+        // --- GAME CONSTANTS & VARIABLES ---
+        const LANE_WIDTH = 3.5;
+        const TILE_LENGTH = 15;
+        const LEVEL_DISTANCE = 600; 
+        const TOTAL_LEVELS = 5;
+        const TREASURE_Z = -(LEVEL_DISTANCE * TOTAL_LEVELS + 50);
+
+        let scene, camera, renderer;
+        let playerGroup;
+        let playerLimbs = [];
+        
+        let gameState = 'START'; // START, PLAYING, GAMEOVER, VICTORY
+        let score = 0, coins = 0, currentLevel = 1;
+        let gameSpeed = 0.4;
+        
+        // Player state
+        let currentLane = 1; // 0: Left, 1: Center, 2: Right
+        let playerVelocityY = 0;
+        let isJumping = false;
+        let jumpGravity = 0.025;
+        let jumpStrength = 0.5;
+
+        // World Arrays
+        let activeTiles = [];
+        let activeObstacles = [];
+        let activeCoins = [];
+        let activeScenery = [];
+        let nextSpawnZ = 0;
+
+        // Shared Geometries & Materials for performance
+        const geoTile = new THREE.BoxGeometry(LANE_WIDTH - 0.2, 1, TILE_LENGTH);
+        const geoNarrowTile = new THREE.BoxGeometry(LANE_WIDTH - 1.5, 1, TILE_LENGTH);
+        const geoRock = new THREE.DodecahedronGeometry(1.2, 0);
+        const geoCoin = new THREE.TorusGeometry(0.5, 0.15, 8, 16);
+        const geoBarrier = new THREE.BoxGeometry(LANE_WIDTH - 0.2, 2, 1);
+        const geoTreeTrunk = new THREE.CylinderGeometry(0.4, 0.6, 3, 8);
+        const geoTreeLeaves = new THREE.ConeGeometry(2, 4, 8);
+
+        const matGrass = new THREE.MeshLambertMaterial({ color: 0x4CAF50 });
+        const matStone = new THREE.MeshLambertMaterial({ color: 0x808080 });
+        const matWood = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+        const matGold = new THREE.MeshLambertMaterial({ color: 0xFFD700, emissive: 0x332200 });
+        const matSand = new THREE.MeshLambertMaterial({ color: 0xE2C275 }); // For collapsing bridges
+        const matDanger = new THREE.MeshLambertMaterial({ color: 0xFF5252 });
+        const matLeaves = new THREE.MeshLambertMaterial({ color: 0x2E8B57 });
+
+        // Input tracking
+        const keys = { left: false, right: false, up: false };
+        let touchStartX = 0, touchStartY = 0;
+
+        // --- INITIALIZATION ---
+        function init() {
+            const canvas = document.getElementById('gameCanvas');
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.Fog(0x87CEEB, 50, 250);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            // Lighting
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+            scene.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(20, 50, 20);
+            dirLight.castShadow = true;
+            dirLight.shadow.camera.left = -20;
+            dirLight.shadow.camera.right = 20;
+            dirLight.shadow.camera.top = 20;
+            dirLight.shadow.camera.bottom = -20;
+            dirLight.shadow.camera.far = 100;
+            dirLight.shadow.bias = -0.001;
+            scene.add(dirLight);
+
+            createPlayer();
+            
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('touchstart', onTouchStart, {passive: false});
+            document.addEventListener('touchend', onTouchEnd, {passive: false});
+
+            // Start animation loop
+            requestAnimationFrame(animate);
+            
+            // Initial decorative scenery
+            generateSceneryForMenu();
+        }
+
+        function createPlayer() {
+            playerGroup = new THREE.Group();
+
+            const matBody = new THREE.MeshLambertMaterial({ color: 0x2196F3 });
+            const matSkin = new THREE.MeshLambertMaterial({ color: 0xFFCCAA });
+
+            // Head
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), matSkin);
+            head.position.y = 2.4;
+            head.castShadow = true;
+            playerGroup.add(head);
+
+            // Body
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.2, 0.6), matBody);
+            body.position.y = 1.4;
+            body.castShadow = true;
+            playerGroup.add(body);
+
+            // Limbs
+            const geoLimb = new THREE.BoxGeometry(0.4, 1, 0.4);
+            
+            const armL = new THREE.Mesh(geoLimb, matSkin);
+            armL.position.set(-0.7, 1.5, 0);
+            armL.castShadow = true;
+            playerGroup.add(armL);
+            
+            const armR = new THREE.Mesh(geoLimb, matSkin);
+            armR.position.set(0.7, 1.5, 0);
+            armR.castShadow = true;
+            playerGroup.add(armR);
+
+            const legL = new THREE.Mesh(geoLimb, matBody);
+            legL.position.set(-0.3, 0.5, 0);
+            legL.castShadow = true;
+            playerGroup.add(legL);
+
+            const legR = new THREE.Mesh(geoLimb, matBody);
+            legR.position.set(0.3, 0.5, 0);
+            legR.castShadow = true;
+            playerGroup.add(legR);
+
+            playerLimbs = { armL, armR, legL, legR };
+            scene.add(playerGroup);
+        }
+
+        function createTreasureChest() {
+            const chestGroup = new THREE.Group();
+            
+            // Base
+            const base = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 3), matWood);
+            base.position.y = 1.5;
+            base.castShadow = true;
+            chestGroup.add(base);
+            
+            // Lid (half cylinder)
+            const lid = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 4, 16, 1, false, 0, Math.PI), matWood);
+            lid.rotation.z = Math.PI / 2;
+            lid.position.y = 3;
+            lid.castShadow = true;
+            chestGroup.add(lid);
+
+            // Gold trim
+            const trim = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.5, 3.2), matGold);
+            trim.position.y = 3;
+            chestGroup.add(trim);
+            
+            // Lock
+            const lock = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 0.5), matGold);
+            lock.position.set(0, 2.5, 1.6);
+            chestGroup.add(lock);
+
+            chestGroup.position.set(0, 0, TREASURE_Z);
+            
+            // Add a light to make it glow
+            const chestLight = new THREE.PointLight(0xFFD700, 2, 20);
+            chestLight.position.set(0, 5, 0);
+            chestGroup.add(chestLight);
+
+            scene.add(chestGroup);
+            activeScenery.push(chestGroup);
+            
+            // End platform
+            const plat = new THREE.Mesh(new THREE.BoxGeometry(20, 1, 20), matStone);
+            plat.position.set(0, -0.5, TREASURE_Z);
+            plat.receiveShadow = true;
+            scene.add(plat);
+            activeTiles.push(plat);
+        }
+
+        // --- INPUT HANDLING ---
+        function onKeyDown(e) {
+            if (gameState !== 'PLAYING') return;
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') moveLeft();
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') moveRight();
+            if (e.code === 'ArrowUp' || e.code === 'Space' || e.code === 'KeyW') jump();
+        }
+
+        function onTouchStart(e) {
+            if (gameState !== 'PLAYING') return;
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        }
+
+        function onTouchEnd(e) {
+            if (gameState !== 'PLAYING') return;
+            const touchEndX = e.changedTouches[0].clientX;
+            const touchEndY = e.changedTouches[0].clientY;
+            
+            const dx = touchEndX - touchStartX;
+            const dy = touchEndY - touchStartY;
+            
+            if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 30) {
+                if (dx > 0) moveRight();
+                else moveLeft();
+            } else if (dy < -30) {
+                jump();
+            } else if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+                jump(); // Tap to jump
+            }
+        }
+
+        function moveLeft() {
+            if (currentLane > 0) currentLane--;
+        }
+
+        function moveRight() {
+            if (currentLane < 2) currentLane++;
+        }
+
+        function jump() {
+            if (!isJumping && playerGroup.position.y < 0.1) {
+                playerVelocityY = jumpStrength;
+                isJumping = true;
+                playSound('jump');
+            }
+        }
+
+        // --- GAME LOGIC ---
+        function goBackToDashboard() {
+            window.location.href = 'index.html';
+        }
+
+        function startGame() {
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('victoryScreen').classList.add('hidden');
+            
+            // Reset Stats
+            score = 0;
+            coins = 0;
+            currentLevel = 1;
+            gameSpeed = 0.4;
+            updateHUD();
+            showLevelText(1);
+            
+            // Reset Player
+            currentLane = 1;
+            playerGroup.position.set(0, 0, 0);
+            playerGroup.rotation.set(0, 0, 0);
+            playerVelocityY = 0;
+            isJumping = false;
+            
+            // Clear World
+            clearWorld();
+            nextSpawnZ = 10; // Start spawning slightly behind player
+            
+            // Initial Generation
+            while (nextSpawnZ > -300) {
+                generateRow(nextSpawnZ);
+                nextSpawnZ -= TILE_LENGTH;
+            }
+            
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            gameState = 'PLAYING';
+        }
+
+        function clearWorld() {
+            activeTiles.forEach(obj => scene.remove(obj));
+            activeObstacles.forEach(obj => scene.remove(obj));
+            activeCoins.forEach(obj => scene.remove(obj));
+            activeScenery.forEach(obj => scene.remove(obj));
+            
+            activeTiles = [];
+            activeObstacles = [];
+            activeCoins = [];
+            activeScenery = [];
+        }
+
+        function gameOver() {
+            gameState = 'GAMEOVER';
+            playSound('crash');
+            document.getElementById('goScore').innerText = Math.floor(score);
+            document.getElementById('goCoins').innerText = coins;
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+        }
+
+        function victory() {
+            gameState = 'VICTORY';
+            playSound('win');
+            document.getElementById('winScore').innerText = Math.floor(score);
+            document.getElementById('winCoins').innerText = coins;
+            document.getElementById('victoryScreen').classList.remove('hidden');
+        }
+
+        function showLevelText(lvl) {
+            const el = document.getElementById('levelText');
+            el.innerText = `Level ${lvl}`;
+            el.style.opacity = 1;
+            setTimeout(() => { el.style.opacity = 0; }, 2000);
+        }
+
+        function updateHUD() {
+            document.getElementById('scoreDisplay').innerText = Math.floor(score);
+            document.getElementById('coinsDisplay').innerText = coins;
+            document.getElementById('levelDisplay').innerText = currentLevel;
+        }
+
+        // --- PROCEDURAL GENERATION ---
+        function generateSceneryForMenu() {
+            // Just some random trees for the start screen
+            for(let i=0; i<20; i++) {
+                spawnTree(-10 - Math.random()*10, -Math.random()*200);
+                spawnTree(10 + Math.random()*10, -Math.random()*200);
+            }
+        }
+
+        function getLaneX(laneIndex) {
+            return (laneIndex - 1) * LANE_WIDTH;
+        }
+
+        function spawnTree(x, z) {
+            const tree = new THREE.Group();
+            
+            const trunk = new THREE.Mesh(geoTreeTrunk, matWood);
+            trunk.position.y = 1.5;
+            trunk.castShadow = true;
+            
+            const leaves = new THREE.Mesh(geoTreeLeaves, matLeaves);
+            leaves.position.y = 4;
+            leaves.castShadow = true;
+            
+            tree.add(trunk);
+            tree.add(leaves);
+            tree.position.set(x, 0, z);
+            
+            scene.add(tree);
+            activeScenery.push(tree);
+        }
+
+        function generateRow(z) {
+            // Don't generate normal rows past the treasure
+            if (z <= TREASURE_Z + 50) {
+                if (z > TREASURE_Z && z < TREASURE_Z + 50) {
+                    // Safe path leading to treasure
+                    for(let i=0; i<3; i++) createTile(i, z, false, false);
+                }
+                if (z === TREASURE_Z + Math.floor(TILE_LENGTH/2)) {
+                    createTreasureChest();
+                }
+                return;
+            }
+
+            // Guarantee at least one safe path
+            let safeLane = Math.floor(Math.random() * 3);
+            
+            // Add scenery occasionally
+            if (Math.random() < 0.3) spawnTree(-7 - Math.random()*5, z);
+            if (Math.random() < 0.3) spawnTree(7 + Math.random()*5, z);
+
+            for (let i = 0; i < 3; i++) {
+                if (i === safeLane) {
+                    // Safe lane: Normal tile, no obstacles, maybe coins
+                    createTile(i, z, false, false);
+                    if (Math.random() < 0.3) spawnCoinString(i, z);
+                } else {
+                    // Random lane logic based on level
+                    let isGap = false;
+                    let isNarrow = false;
+                    let isCollapsing = false;
+
+                    if (currentLevel >= 3 && Math.random() < 0.15) isGap = true;
+                    if (currentLevel >= 4 && !isGap && Math.random() < 0.2) isNarrow = true;
+                    if (currentLevel >= 5 && !isGap && Math.random() < 0.2) isCollapsing = true;
+
+                    if (!isGap) {
+                        createTile(i, z, isNarrow, isCollapsing);
+                        
+                        // Decide Obstacle
+                        let obstacleChance = 0.1 + (currentLevel * 0.05);
+                        if (Math.random() < obstacleChance) {
+                            createObstacle(i, z);
+                        } else if (Math.random() < 0.2) {
+                            spawnCoinString(i, z);
+                        }
+                    }
+                }
+            }
+        }
+
+        function createTile(lane, z, isNarrow, isCollapsing) {
+            const geo = isNarrow ? geoNarrowTile : geoTile;
+            const mat = isCollapsing ? matSand : matGrass;
+            
+            const tile = new THREE.Mesh(geo, mat);
+            tile.position.set(getLaneX(lane), -0.5, z);
+            tile.receiveShadow = true;
+            
+            // User Data for logic
+            tile.userData = { 
+                lane: lane, 
+                isCollapsing: isCollapsing,
+                hasCollapsed: false
+            };
+            
+            scene.add(tile);
+            activeTiles.push(tile);
+        }
+
+        function spawnCoinString(lane, z) {
+            let count = currentLevel >= 2 ? (Math.random() < 0.5 ? 3 : 1) : 1;
+            for(let c=0; c<count; c++) {
+                const coin = new THREE.Mesh(geoCoin, matGold);
+                coin.position.set(getLaneX(lane), 1, z - (c * 3));
+                coin.rotation.y = Math.random() * Math.PI;
+                coin.castShadow = true;
+                scene.add(coin);
+                activeCoins.push(coin);
+            }
+        }
+
+        function createObstacle(lane, z) {
+            let type = 'rock';
+            if (currentLevel >= 2 && Math.random() < 0.4) type = 'barrier';
+            
+            let isMoving = false;
+            if (currentLevel >= 4 && Math.random() < 0.3) isMoving = true;
+
+            let obs;
+            if (type === 'rock') {
+                obs = new THREE.Mesh(geoRock, matStone);
+                obs.position.set(getLaneX(lane), 0.8, z);
+                // Rotate randomly for variety
+                obs.rotation.set(Math.random(), Math.random(), Math.random());
+            } else {
+                obs = new THREE.Mesh(geoBarrier, matWood);
+                obs.position.set(getLaneX(lane), 1, z);
+            }
+            
+            obs.castShadow = true;
+            obs.receiveShadow = true;
+            obs.userData = {
+                isMoving: isMoving,
+                baseX: getLaneX(lane),
+                offset: Math.random() * Math.PI * 2,
+                speed: 0.03 + Math.random() * 0.02
+            };
+
+            scene.add(obs);
+            activeObstacles.push(obs);
+        }
+
+
+        // --- MAIN LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (gameState === 'PLAYING') {
+                updateGame();
+            } else if (gameState === 'VICTORY') {
+                // Celebration animation
+                playerGroup.rotation.y += 0.05;
+                if(playerGroup.position.y <= 0) {
+                    playerVelocityY = 0.3;
+                }
+                playerGroup.position.y += playerVelocityY;
+                playerVelocityY -= jumpGravity;
+                if(playerGroup.position.y < 0) playerGroup.position.y = 0;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function updateGame() {
+            // Forward Movement
+            playerGroup.position.z -= gameSpeed;
+            score += gameSpeed * 0.1;
+            
+            // Level Progression
+            let distance = -playerGroup.position.z;
+            let newLevel = Math.min(TOTAL_LEVELS, Math.floor(distance / LEVEL_DISTANCE) + 1);
+            if (newLevel > currentLevel) {
+                currentLevel = newLevel;
+                gameSpeed = 0.4 + (currentLevel * 0.08); // Speed increases
+                showLevelText(currentLevel);
+                playSound('coin'); // soft ping
+            }
+            
+            if (distance % 30 < 1) updateHUD();
+
+            // Check Victory
+            if (playerGroup.position.z <= TREASURE_Z + 5) {
+                victory();
+                return;
+            }
+
+            // Lane interpolation
+            const targetX = getLaneX(currentLane);
+            playerGroup.position.x += (targetX - playerGroup.position.x) * 0.2;
+
+            // Jumping & Gravity
+            playerGroup.position.y += playerVelocityY;
+            if (playerGroup.position.y > 0 || isJumping) {
+                playerVelocityY -= jumpGravity;
+            }
+
+            // Collision Box Setup
+            const playerBox = new THREE.Box3().setFromObject(playerGroup);
+            playerBox.expandByScalar(-0.2); // Forgiveness buffer
+
+            // Ground & Gap Check
+            let onGround = false;
+            for (let tile of activeTiles) {
+                // Check if player is directly over the tile
+                if (Math.abs(tile.position.z - playerGroup.position.z) < TILE_LENGTH/2 &&
+                    Math.abs(tile.position.x - playerGroup.position.x) < LANE_WIDTH/2) {
+                    
+                    // Trigger Collapse
+                    if (tile.userData.isCollapsing && !tile.userData.hasCollapsed && tile.position.z - playerGroup.position.z > -10) {
+                        tile.userData.hasCollapsed = true;
+                        playSound('collapse');
+                    }
+
+                    if (tile.position.y >= -0.6) {
+                        onGround = true;
+                    }
+                }
+
+                // Animate collapsing
+                if (tile.userData.hasCollapsed && tile.position.y > -10) {
+                    tile.position.y -= 0.3;
+                }
+            }
+
+            if (onGround && playerVelocityY <= 0) {
+                playerGroup.position.y = 0;
+                playerVelocityY = 0;
+                isJumping = false;
+            } else if (!onGround && playerGroup.position.y <= 0) {
+                // Falling into gap!
+                playerVelocityY -= jumpGravity; // fall faster
+            }
+
+            // Death by falling
+            if (playerGroup.position.y < -5) {
+                gameOver();
+                return;
+            }
+
+            // Update Obstacles & Check Collision
+            for (let i = activeObstacles.length - 1; i >= 0; i--) {
+                let obs = activeObstacles[i];
+                
+                // Move dynamic obstacles
+                if (obs.userData.isMoving) {
+                    obs.position.x = obs.userData.baseX + Math.sin(Date.now() * obs.userData.speed + obs.userData.offset) * 2;
+                }
+
+                const obsBox = new THREE.Box3().setFromObject(obs);
+                obsBox.expandByScalar(-0.1);
+
+                if (playerBox.intersectsBox(obsBox)) {
+                    gameOver();
+                    return;
+                }
+            }
+
+            // Check Coins
+            for (let i = activeCoins.length - 1; i >= 0; i--) {
+                let coin = activeCoins[i];
+                coin.rotation.y += 0.05; // Spin animation
+                
+                const coinBox = new THREE.Box3().setFromObject(coin);
+                if (playerBox.intersectsBox(coinBox)) {
+                    coins++;
+                    score += 50;
+                    updateHUD();
+                    playSound('coin');
+                    scene.remove(coin);
+                    activeCoins.splice(i, 1);
+                }
+            }
+
+            // Character Running Animation
+            if (!isJumping) {
+                const time = Date.now() * 0.015 * (gameSpeed / 0.4);
+                playerLimbs.armL.rotation.x = Math.sin(time) * 0.8;
+                playerLimbs.armR.rotation.x = Math.sin(time + Math.PI) * 0.8;
+                playerLimbs.legL.rotation.x = Math.sin(time + Math.PI) * 0.8;
+                playerLimbs.legR.rotation.x = Math.sin(time) * 0.8;
+            } else {
+                // Freeze limbs while jumping
+                playerLimbs.armL.rotation.x = -0.5;
+                playerLimbs.armR.rotation.x = -0.5;
+                playerLimbs.legL.rotation.x = 0.5;
+                playerLimbs.legR.rotation.x = -0.2;
+            }
+
+            // Camera Follow
+            camera.position.x = playerGroup.position.x * 0.5;
+            camera.position.y = 6 + playerGroup.position.y * 0.2;
+            camera.position.z = playerGroup.position.z + 12;
+            camera.lookAt(playerGroup.position.x * 0.2, playerGroup.position.y * 0.2 + 2, playerGroup.position.z - 10);
+
+            // World Generation & Cleanup
+            while (nextSpawnZ > playerGroup.position.z - 300) {
+                generateRow(nextSpawnZ);
+                nextSpawnZ -= TILE_LENGTH;
+            }
+
+            cleanupArrays(activeTiles);
+            cleanupArrays(activeObstacles);
+            cleanupArrays(activeCoins);
+            cleanupArrays(activeScenery);
+        }
+
+        function cleanupArrays(arr) {
+            for (let i = arr.length - 1; i >= 0; i--) {
+                if (arr[i].position.z > playerGroup.position.z + 20) {
+                    scene.remove(arr[i]);
+                    arr.splice(i, 1);
+                }
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Initialize on load
+        window.onload = init;
+
+    </script>
+</body>
+</html>
